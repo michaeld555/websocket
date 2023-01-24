@@ -2,7 +2,7 @@ var config = require('./config');
 var fs = require('fs');
 var express = require('express');
 var app = express();
-var http = require('http');//.createServer(app)//.listen(8440);
+var http = require('https');//.createServer(app)//.listen(8440);
 var socket = require('socket.io');//(server); //SITE init start
 
 //var app = express();
