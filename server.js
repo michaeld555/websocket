@@ -4,6 +4,21 @@ var express = require('express');
 var app = express();
 var http = require('http');//.createServer(app)//.listen(8440);
 var socket = require('socket.io');//(server); //SITE init start
+var mercadopago = require('mercadopago');
+const nodemailer = require('nodemailer');
+
+// Configure as informações do servidor SMTP
+let transporter = nodemailer.createTransport({
+  host: 'smtp.mailtrap.io',
+  port: 2525,
+  secure: false,
+  auth: {
+    user: "f43391aba9ae0c",
+    pass: "f71ac21bc99c3c"
+  }
+});
+
+mercadopago.configurations.setAccessToken('TEST-161413813774180-122019-fe53b6c4db13001bdc5389f4bd2debbd-731754701');
 
 //var app = express();
 var http_server = http.createServer(app).listen(8443);
@@ -153,7 +168,6 @@ var allPrices = [];
 
 var getPrices = function() {
 	bitskins.getAllItemPrices().then((data) => {
-		console.log(data)
 		if(data.status == "success") {
 		fs.writeFile('prices.json', JSON.stringify(data), 'utf8', function() {
 			console.log('Prices upgrade');
@@ -1263,10 +1277,82 @@ io.on('connection', function(socket) {
 			}
 		});
 	});
+
+
 	socket.on('crash withdraw', function() {
 		if (!user) return socket.emit('notify', 'error', 'notLoggedIn');
 		crashWithdraw(user);
 	});
+
+	socket.on('forget emailP', function(email) {
+		console.log('entrou aqui')
+		var newPssword = generatePassword();
+
+		console.log('UPDATE `users` SET `password` = `' + newPssword + '`  WHERE `email` = `' + email +'`')
+		connection.query('UPDATE `users` SET `password` = "' + newPssword + '"  WHERE `email` = "' + email +'"', function(err) {
+			if (err) {
+				console.log(err)
+			} else {
+
+				let mailOptions = {
+					from: 'seu_email@email.com',
+					to: email,
+					subject: 'Nova Senha OnlyGames',
+					text: 'Sua nova senha é: '+newPssword+''
+				  };
+				  
+				  // Envia o e-mail
+				  transporter.sendMail(mailOptions, function(error, info){
+					if (error) {
+					  console.log(error);
+					} else {
+					  console.log('Email enviado: ' + info.response);
+					}
+				  });
+
+			}
+		});
+
+	});
+
+
+	socket.on('pagamento pix', function(valor, cpf) {
+		if (!user) return socket.emit('notify', 'error', 'Usuario não logado');
+
+			var payment_data = {
+				transaction_amount: parseFloat(valor),
+				description: 'Saldo Onlygames',
+				payment_method_id: 'pix',
+				payer: {
+				  email: 'saldo@onlygames.com',
+				  first_name: 'Recarga',
+				  last_name: 'Usuario',
+				  identification: {
+					  type: 'CPF',
+					  number: cpf
+				  }
+				}
+			  };
+			
+			  mercadopago.payment.create(payment_data).then(function (data) {
+
+				socket.emit('retorno pix', data);
+
+				var sqlPayment = 'INSERT INTO `payment_history` SET `user` = ' + user.id + ', `payment_id` = "'+data.body.id+'", `value` = '+data.body.transaction_amount+'';
+
+				connection.query(sqlPayment, function(err5, row2) {
+
+					if(err5) {
+						return [socket.emit('notify','error','Erro ao salvar pagamento')];
+					}
+				});
+				
+			  }).catch(function (error) {
+				socket.emit('notify', 'error', 'Erro, Tente Novamente')
+			  });
+			
+	});
+
 	socket.on('jackpot play', function(play) {
 		if (!user) return socket.emit('notify', 'error', 'notLoggedIn');
 		if (!play) return socket.emit('notify', 'error', 'jackpotPlayFailed');
@@ -2698,6 +2784,10 @@ function time() {
 
 function generate(count) {
     return crypto.randomBytes(count).toString('hex');
+}
+
+function generatePassword() {
+    return crypto.randomBytes(4).toString('hex').slice(0, 8);
 }
 
 function array_limit(wartosc) {
